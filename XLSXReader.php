@@ -23,7 +23,8 @@ Key Changes include:
 	Removed rowsEx functionality including extraction of hyperlinks
 */
 
-class XLSXReader {
+class XLSXReader
+{
 	protected $sheets = array();
 	protected $sharedstrings = array();
 	protected $sheetInfo;
@@ -31,19 +32,20 @@ class XLSXReader {
 	public $config = array(
 		'removeTrailingRows' => true
 	);
-	
-	// XML schemas
-	const SCHEMA_OFFICEDOCUMENT  =  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
-	const SCHEMA_RELATIONSHIP  =  'http://schemas.openxmlformats.org/package/2006/relationships';
-	const SCHEMA_OFFICEDOCUMENT_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-	const SCHEMA_SHAREDSTRINGS =  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings';
-	const SCHEMA_WORKSHEETRELATION =  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
 
-	public function __construct($filePath, $config = array()) {
+	// XML schemas
+	const SCHEMA_OFFICEDOCUMENT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+	const SCHEMA_RELATIONSHIP = 'http://schemas.openxmlformats.org/package/2006/relationships';
+	const SCHEMA_OFFICEDOCUMENT_RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+	const SCHEMA_SHAREDSTRINGS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings';
+	const SCHEMA_WORKSHEETRELATION = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
+
+	public function __construct($filePath, $config = array())
+	{
 		$this->config = array_merge($this->config, $config);
 		$this->zip = new ZipArchive();
 		$status = $this->zip->open($filePath);
-		if($status === true) {
+		if ($status === true) {
 			$this->parse();
 		} else {
 			throw new Exception("Failed to open $filePath with zip error code: $status");
@@ -51,9 +53,10 @@ class XLSXReader {
 	}
 
 	// get a file from the zip
-	protected function getEntryData($name) {
+	protected function getEntryData($name)
+	{
 		$data = $this->zip->getFromName($name);
-		if($data === false) {
+		if ($data === false) {
 			throw new Exception("File $name does not exist in the Excel file");
 		} else {
 			return $data;
@@ -61,33 +64,34 @@ class XLSXReader {
 	}
 
 	// extract the shared string and the list of sheets
-	protected function parse() {
+	protected function parse()
+	{
 		$sheets = array();
 		$relationshipsXML = simplexml_load_string($this->getEntryData("_rels/.rels"));
-		foreach($relationshipsXML->Relationship as $rel) {
-			if($rel['Type'] == self::SCHEMA_OFFICEDOCUMENT) {
+		foreach ($relationshipsXML->Relationship as $rel) {
+			if ($rel['Type'] == self::SCHEMA_OFFICEDOCUMENT) {
 				$workbookDir = dirname($rel['Target']) . '/';
 				$workbookXML = simplexml_load_string($this->getEntryData($rel['Target']));
-				foreach($workbookXML->sheets->sheet as $sheet) {				
+				foreach ($workbookXML->sheets->sheet as $sheet) {
 					$r = $sheet->attributes('r', true);
-					$sheets[(string)$r->id] = array(
-						'sheetId' => (int)$sheet['sheetId'],
-						'name' => (string)$sheet['name']
+					$sheets[(string) $r->id] = array(
+						'sheetId' => (int) $sheet['sheetId'],
+						'name' => (string) $sheet['name']
 					);
-					
+
 				}
 				$workbookRelationsXML = simplexml_load_string($this->getEntryData($workbookDir . '_rels/' . basename($rel['Target']) . '.rels'));
-				foreach($workbookRelationsXML->Relationship as $wrel) {
-					switch($wrel['Type']) {
+				foreach ($workbookRelationsXML->Relationship as $wrel) {
+					switch ($wrel['Type']) {
 						case self::SCHEMA_WORKSHEETRELATION:
-							$sheets[(string)$wrel['Id']]['path'] = $workbookDir . (string)$wrel['Target'];
+							$sheets[(string) $wrel['Id']]['path'] = $workbookDir . (string) $wrel['Target'];
 							break;
 						case self::SCHEMA_SHAREDSTRINGS:
-							$sharedStringsXML = simplexml_load_string($this->getEntryData($workbookDir . (string)$wrel['Target']));
-							foreach($sharedStringsXML->si as $val) {
-								if(isset($val->t)) {
-									$this->sharedStrings[] = (string)$val->t;
-								} elseif(isset($val->r)) {
+							$sharedStringsXML = simplexml_load_string($this->getEntryData($workbookDir . (string) $wrel['Target']));
+							foreach ($sharedStringsXML->si as $val) {
+								if (isset($val->t)) {
+									$this->sharedStrings[] = (string) $val->t;
+								} elseif (isset($val->r)) {
 									$this->sharedStrings[] = XLSXWorksheet::parseRichText($val);
 								}
 							}
@@ -97,7 +101,7 @@ class XLSXReader {
 			}
 		}
 		$this->sheetInfo = array();
-		foreach($sheets as $rid=>$info) {
+		foreach ($sheets as $rid => $info) {
 			$this->sheetInfo[$info['name']] = array(
 				'sheetId' => $info['sheetId'],
 				'rid' => $rid,
@@ -107,64 +111,72 @@ class XLSXReader {
 	}
 
 	// returns an array of sheet names, indexed by sheetId
-	public function getSheetNames() {
+	public function getSheetNames()
+	{
 		$res = array();
-		foreach($this->sheetInfo as $sheetName=>$info) {
+		foreach ($this->sheetInfo as $sheetName => $info) {
 			$res[$info['sheetId']] = $sheetName;
 		}
 		return $res;
 	}
 
-	public function getSheetCount() {
+	public function getSheetCount()
+	{
 		return count($this->sheetInfo);
 	}
 
 	// instantiates a sheet object (if needed) and returns an array of its data
-	public function getSheetData($sheetNameOrId) {
+	public function getSheetData($sheetNameOrId)
+	{
 		$sheet = $this->getSheet($sheetNameOrId);
 		return $sheet->getData();
 	}
 
 	// instantiates a sheet object (if needed) and returns the sheet object
-	public function getSheet($sheet) {
-		if(is_numeric($sheet)) {
+	public function getSheet($sheet)
+	{
+		if (is_numeric($sheet)) {
 			$sheet = $this->getSheetNameById($sheet);
-		} elseif(!is_string($sheet)) {
+		} elseif (!is_string($sheet)) {
 			throw new Exception("Sheet must be a string or a sheet Id");
 		}
-		if(!array_key_exists($sheet, $this->sheets)) {
+		if (!array_key_exists($sheet, $this->sheets)) {
 			$this->sheets[$sheet] = new XLSXWorksheet($this->getSheetXML($sheet), $sheet, $this);
 
 		}
 		return $this->sheets[$sheet];
 	}
 
-	public function getSheetNameById($sheetId) {
-		foreach($this->sheetInfo as $sheetName=>$sheetInfo) {
-			if($sheetInfo['sheetId'] === $sheetId) {
+	public function getSheetNameById($sheetId)
+	{
+		foreach ($this->sheetInfo as $sheetName => $sheetInfo) {
+			if ($sheetInfo['sheetId'] === $sheetId) {
 				return $sheetName;
 			}
 		}
 		throw new Exception("Sheet ID $sheetId does not exist in the Excel file");
 	}
 
-	protected function getSheetXML($name) {
+	protected function getSheetXML($name)
+	{
 		return simplexml_load_string($this->getEntryData($this->sheetInfo[$name]['path']));
 	}
 
 	// converts an Excel date field (a number) to a unix timestamp (granularity: seconds)
-	public static function toUnixTimeStamp($excelDateTime) {
-		if(!is_numeric($excelDateTime)) {
+	public static function toUnixTimeStamp($excelDateTime)
+	{
+		if (!is_numeric($excelDateTime)) {
 			return $excelDateTime;
 		}
 		$d = floor($excelDateTime); // seconds since 1900
 		$t = $excelDateTime - $d;
-		return ($d > 0) ? ( $d - 25569 ) * 86400 + $t * 86400 : $t * 86400;
+		return ($d > 0) ? ($d - 25569) * 86400 + $t * 86400 : $t * 86400;
 	}
 
 }
 
-class XLSXWorksheet {
+class XLSXWorksheet
+{
 
 	protected $workbook;
 	public $sheetName;
@@ -173,7 +185,8 @@ class XLSXWorksheet {
 	public $rowCount;
 	protected $config;
 
-	public function __construct($xml, $sheetName, XLSXReader $workbook) {
+	public function __construct($xml, $sheetName, XLSXReader $workbook)
+	{
 		$this->config = $workbook->config;
 		$this->sheetName = $sheetName;
 		$this->workbook = $workbook;
@@ -181,16 +194,19 @@ class XLSXWorksheet {
 	}
 
 	// returns an array of the data from the sheet
-	public function getData() {
+	public function getData()
+	{
 		return $this->data;
 	}
 
-	protected function parse($xml) {
+	protected function parse($xml)
+	{
 		$this->parseDimensions($xml->dimension);
 		$this->parseData($xml->sheetData);
 	}
 
-	protected function parseDimensions($dimensions) {
+	protected function parseDimensions($dimensions)
+	{
 		$range = (string) $dimensions['ref'];
 		$cells = explode(':', $range);
 		$maxValues = $this->getColumnIndex($cells[1]);
@@ -198,32 +214,33 @@ class XLSXWorksheet {
 		$this->rowCount = $maxValues[1] + 1;
 	}
 
-	protected function parseData($sheetData) {
+	protected function parseData($sheetData)
+	{
 		$rows = array();
 		$curR = 0;
 		$lastDataRow = -1;
 		foreach ($sheetData->row as $row) {
-			$rowNum = (int)$row['r'];
-			if($rowNum != ($curR + 1)) {
+			$rowNum = (int) $row['r'];
+			if ($rowNum != ($curR + 1)) {
 				$missingRows = $rowNum - ($curR + 1);
-				for($i=0; $i < $missingRows; $i++) {
-					$rows[$curR] = array_pad(array(),$this->colCount,null);
+				for ($i = 0; $i < $missingRows; $i++) {
+					$rows[$curR] = array_pad(array(), $this->colCount, null);
 					$curR++;
 				}
 			}
 			$curC = 0;
 			$rowData = array();
 			foreach ($row->c as $c) {
-				list($cellIndex,) = $this->getColumnIndex((string) $c['r']);
-				if($cellIndex !== $curC) {
+				list($cellIndex, ) = $this->getColumnIndex((string) $c['r']);
+				if ($cellIndex !== $curC) {
 					$missingCols = $cellIndex - $curC;
-					for($i=0;$i<$missingCols;$i++) {
+					for ($i = 0; $i < $missingCols; $i++) {
 						$rowData[$curC] = null;
 						$curC++;
 					}
 				}
 				$val = $this->parseCellValue($c);
-				if(!is_null($val)) {
+				if (!is_null($val)) {
 					$lastDataRow = $curR;
 				}
 				$rowData[$curC] = $val;
@@ -232,7 +249,7 @@ class XLSXWorksheet {
 			$rows[$curR] = array_pad($rowData, $this->colCount, null);
 			$curR++;
 		}
-		if($this->config['removeTrailingRows']) {
+		if ($this->config['removeTrailingRows']) {
 			$this->data = array_slice($rows, 0, $lastDataRow + 1);
 			$this->rowCount = count($this->data);
 		} else {
@@ -240,78 +257,84 @@ class XLSXWorksheet {
 		}
 	}
 
-	protected function getColumnIndex($cell = 'A1') {
+	protected function getColumnIndex($cell = 'A1')
+	{
 		if (preg_match("/([A-Z]+)(\d+)/", $cell, $matches)) {
-			
+
 			$col = $matches[1];
 			$row = $matches[2];
 			$colLen = strlen($col);
 			$index = 0;
 
-			for ($i = $colLen-1; $i >= 0; $i--) {
-				$index += (ord($col{$i}) - 64) * pow(26, $colLen-$i-1);
+			for ($i = $colLen - 1; $i >= 0; $i--) {
+				$index += (ord($col[$i]) - 64) * pow(26, $colLen - $i - 1);
 			}
-			return array($index-1, $row-1);
+			return array($index - 1, $row - 1);
 		}
 		throw new Exception("Invalid cell index");
 	}
-	
-	protected function parseCellValue($cell) {
+
+	protected function parseCellValue($cell)
+	{
 		// $cell['t'] is the cell type
-		switch ((string)$cell["t"]) {
+		switch ((string) $cell["t"]) {
 			case "s": // Value is a shared string
-				if ((string)$cell->v != '') {
+				if ((string) $cell->v != '') {
 					$value = $this->workbook->sharedStrings[intval($cell->v)];
 				} else {
 					$value = '';
 				}
 				break;
 			case "b": // Value is boolean
-				$value = (string)$cell->v;
+				$value = (string) $cell->v;
 				if ($value == '0') {
 					$value = false;
 				} else if ($value == '1') {
 					$value = true;
 				} else {
-					$value = (bool)$cell->v;
+					$value = (bool) $cell->v;
 				}
 				break;
 			case "inlineStr": // Value is rich text inline
 				$value = self::parseRichText($cell->is);
 				break;
 			case "e": // Value is an error message
-				if ((string)$cell->v != '') {
-					$value = (string)$cell->v;
+				if ((string) $cell->v != '') {
+					$value = (string) $cell->v;
 				} else {
 					$value = '';
 				}
 				break;
 			default:
-				if(!isset($cell->v)) {
+				if (!isset($cell->v)) {
 					return null;
 				}
-				$value = (string)$cell->v;
+				$value = (string) $cell->v;
 
 				// Check for numeric values
 				if (is_numeric($value)) {
-					if ($value == (int)$value) $value = (int)$value;
-					elseif ($value == (float)$value) $value = (float)$value;
-					elseif ($value == (double)$value) $value = (double)$value;
+					if ($value == (int) $value)
+						$value = (int) $value;
+					elseif ($value == (float) $value)
+						$value = (float) $value;
+					elseif ($value == (double) $value)
+						$value = (double) $value;
 				}
 		}
 		return $value;
 	}
 
 	// returns the text content from a rich text or inline string field
-    public static function parseRichText($is = null) {
-        $value = array();
-        if (isset($is->t)) {
-            $value[] = (string)$is->t;
-        } else {
-            foreach ($is->r as $run) {
-                $value[] = (string)$run->t;
-            }
-        }
-        return implode(' ', $value);
-    }
+	public static function parseRichText($is = null)
+	{
+		$value = array();
+		if (isset($is->t)) {
+			$value[] = (string) $is->t;
+		} else {
+			foreach ($is->r as $run) {
+				$value[] = (string) $run->t;
+			}
+		}
+		return implode(' ', $value);
+	}
 }
